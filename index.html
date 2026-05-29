@@ -942,15 +942,19 @@ function renderAI(){
         </div>
       </div>
       <div class="ai-card-body" style="flex:1;display:flex;flex-direction:column">
-        <div class="chat-messages" id="chat-messages">${chatHTML}</div>
+        <div class="chat-messages" id="chat-messages"
+          ondragover="event.preventDefault();this.style.outline='2px dashed var(--acc)'"
+          ondragleave="this.style.outline=''"
+          ondrop="this.style.outline='';handleImageDrop(event)">${chatHTML}</div>
         ${pendingImage?`<div style="padding:0 4px 8px"><div class="img-preview-wrap"><img src="${pendingImage}" alt="preview"><button class="img-preview-rm" onclick="clearPendingImage()" title="Remove">✕</button></div></div>`:''}
         <div class="chat-input-row">
           <label class="img-upload-btn" title="${lang==='en'?'Upload exercise photo':'העלה תמונת תרגיל'}">
             📷<input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(this)">
           </label>
-          <textarea id="chat-input" class="chat-input" rows="1" placeholder="${t.chat_ph}"
+          <textarea id="chat-input" class="chat-input" rows="1" placeholder="${lang==='en'?'Ask a question or paste a screenshot (Cmd+V)…':'שאל שאלה או הדבק צילום מסך (Cmd+V)…'}"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
-            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
+            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"
+            onpaste="handlePaste(event)"></textarea>
           <button onclick="sendChat()" id="chat-send" class="ai-btn green" style="padding:9px 16px;flex-shrink:0">↑</button>
         </div>
       </div>
@@ -987,6 +991,29 @@ function handleImageUpload(input){
   input.value='';
 }
 function clearPendingImage(){pendingImage=null;renderAI();}
+function handlePaste(e){
+  const items=e.clipboardData?.items;
+  if(!items)return;
+  for(const item of items){
+    if(item.type.startsWith('image/')){
+      e.preventDefault();
+      const file=item.getAsFile();
+      if(!file)continue;
+      const reader=new FileReader();
+      reader.onload=ev=>{pendingImage=ev.target.result;renderAI();setTimeout(()=>{const el=document.getElementById('chat-input');if(el)el.focus();},0);};
+      reader.readAsDataURL(file);
+      return;
+    }
+  }
+}
+function handleImageDrop(e){
+  e.preventDefault();
+  const file=[...e.dataTransfer.files].find(f=>f.type.startsWith('image/'));
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=ev=>{pendingImage=ev.target.result;renderAI();};
+  reader.readAsDataURL(file);
+}
 
 /* ═══════════════════════════════════════════════════════
    Provider helpers
