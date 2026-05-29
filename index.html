@@ -86,6 +86,7 @@
     .ttag.selected-tag{outline:2px solid currentColor;outline-offset:1px;transform:translateY(-1px);box-shadow:var(--sh2)}
     .v-targul{border-style:dashed!important}
     .v-hazara{opacity:.7}
+    .v-lecture{border-style:dotted!important;font-weight:700}
     .pal-sep{height:1px;background:var(--bord);margin:14px 0}
     .selected-hint{display:none;font-size:.62rem;color:var(--acc);font-weight:600;text-align:center;padding:8px;background:rgba(129,140,248,.08);border-radius:7px;border:1px dashed rgba(129,140,248,.3);margin-top:8px;animation:pulse 1.5s infinite}
     .selected-hint.visible{display:block}
@@ -360,7 +361,7 @@ const T={
     week_of:(n,t)=>`Week ${n} / ${t}`,
     week_rng:(d1,m1,d2,m2)=>`${MEN[m1]} ${d1} – ${MEN[m2]} ${d2}`,
     days:['Sun','Mon','Tue','Wed','Thu'],
-    types:{chomer:{lbl:'Theory',ico:'📖',v:'v-chomer'},targul:{lbl:'Homework',ico:'✏️',v:'v-targul'},hazara:{lbl:'Review',ico:'🔄',v:'v-hazara'}},
+    types:{lecture:{lbl:'Lecture',ico:'🎓',v:'v-lecture'},chomer:{lbl:'Theory',ico:'📖',v:'v-chomer'},targul:{lbl:'Homework',ico:'✏️',v:'v-targul'},hazara:{lbl:'Review',ico:'🔄',v:'v-hazara'}},
     prog_title:'Course Progress',prog_sub:'Click a week: ✅ done → ❌ review → ○ reset',
     week_lbl:(n)=>`W${n}`,done_lbl:'Done',bad_lbl:'Review',empty_lbl:'—',
     done_count:(n)=>`${n} done`,bad_count:(n)=>`${n} review`,
@@ -393,7 +394,7 @@ const T={
     week_of:(n,t)=>`שבוע ${n} / ${t}`,
     week_rng:(d1,m1,d2,m2)=>`${d1} ${MHE[m1]} – ${d2} ${MHE[m2]}`,
     days:['א׳','ב׳','ג׳','ד׳','ה׳'],
-    types:{chomer:{lbl:'חומר',ico:'📖',v:'v-chomer'},targul:{lbl:'תרגיל בית',ico:'✏️',v:'v-targul'},hazara:{lbl:'חזרה',ico:'🔄',v:'v-hazara'}},
+    types:{lecture:{lbl:'הרצאה',ico:'🎓',v:'v-lecture'},chomer:{lbl:'חומר',ico:'📖',v:'v-chomer'},targul:{lbl:'תרגיל בית',ico:'✏️',v:'v-targul'},hazara:{lbl:'חזרה',ico:'🔄',v:'v-hazara'}},
     prog_title:'מעקב קורסים',prog_sub:'לחץ על תא: ✅ סיום → ❌ לחזור → ○ איפוס',
     week_lbl:(n)=>`ש${n}`,done_lbl:'הסתיים',bad_lbl:'לחזור',empty_lbl:'—',
     done_count:(n)=>`${n} הסתיים`,bad_count:(n)=>`${n} לחזור`,
@@ -436,7 +437,7 @@ const SUBJ={
     {id:'matapp2', n:{en:'Matapp 2',     he:'מתאפ 2'},      c:'#C084FC',bg:'rgba(192,132,252,.11)', tx:'#D8B4FE'},
   ]
 };
-const TYPES=['chomer','targul','hazara'];
+const TYPES=['lecture','chomer','targul','hazara'];
 const HOURS=[9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0];
 const BREAK={id:'break',n:{en:'Break',he:'הפסקה'},c:'#6B7280',bg:'rgba(107,114,128,.12)',tx:'#9CA3AF'};
 const WEEK_COUNT=12;
@@ -1060,10 +1061,10 @@ async function buildSchedule(){
   const subjNames=subjs.map(s=>sName(s)).join(', ');
   const sysPrompt=`You are a study schedule assistant for a student at the Hebrew University of Jerusalem.
 The student "${person}" has courses: ${subjNames}.
-Activity types: Theory (📖), Homework (✏️), Review (🔄), Break (☕).
+Activity types: Lecture (🎓), Theory (📖), Homework (✏️), Review (🔄), Break (☕).
 Study hours: 09:00 to midnight (00:00).
 Return ONLY a valid JSON array. No markdown, no explanation.
-Format: [{"hour":9,"subject":"Infi 2","type":"Theory","note":"optional short note"},...]
+Format: [{"hour":9,"subject":"Infi 2","type":"Lecture","note":"optional short note"},...]
 Include realistic breaks. Cover the hours based on student's request.`;
 
   try{
@@ -1087,8 +1088,8 @@ function renderAISchedule(schedule){
     const s=isBreak?BREAK:subjs.find(x=>x.n.en===slot.subject||x.n.he===slot.subject);
     const color=s?s.c:'#6B7280';
     const bg=s?s.bg:'rgba(107,114,128,.1)';
-    const ico=isBreak?'☕':slot.type==='Theory'?'📖':slot.type==='Homework'?'✏️':slot.type==='Review'?'🔄':'📚';
-    const typeLabel=isBreak?(t.break_lbl):(slot.type==='Theory'?t.types.chomer.lbl:slot.type==='Homework'?t.types.targul.lbl:slot.type==='Review'?t.types.hazara.lbl:slot.type);
+    const ico=isBreak?'☕':slot.type==='Lecture'?'🎓':slot.type==='Theory'?'📖':slot.type==='Homework'?'✏️':slot.type==='Review'?'🔄':'📚';
+    const typeLabel=isBreak?(t.break_lbl):(slot.type==='Lecture'?t.types.lecture.lbl:slot.type==='Theory'?t.types.chomer.lbl:slot.type==='Homework'?t.types.targul.lbl:slot.type==='Review'?t.types.hazara.lbl:slot.type);
     html+=`<div class="ai-slot" style="background:${bg};border-inline-start-color:${color}"><span class="ai-slot-time">${hrl}:00</span><span style="font-size:.85rem">${ico}</span><div class="ai-slot-info"><div class="ai-slot-subj" style="color:${color}">${slot.subject}</div>${slot.note?`<div class="ai-slot-note">${slot.note}</div>`:''}</div><span class="ai-slot-badge">${typeLabel}</span></div>`;
   });
   html+=`</div><button class="apply-btn" onclick='applySchedule(${JSON.stringify(schedule).replace(/'/g,"&#39;")})'>✅ ${t.apply_btn}</button>`;
@@ -1102,7 +1103,7 @@ function applySchedule(schedule){
     const isBreak=slot.subject==='Break';
     const s=isBreak?BREAK:subjs.find(x=>x.n.en===slot.subject||x.n.he===slot.subject);
     if(!s)return;
-    const typeMap={'Theory':'chomer','Homework':'targul','Review':'hazara','Break':'break'};
+    const typeMap={'Lecture':'lecture','Theory':'chomer','Homework':'targul','Review':'hazara','Break':'break'};
     const tid=isBreak?'break':(typeMap[slot.type]||'chomer');
     if(inRange(d))addChip(d,slot.hour,s.id,tid);
   });
