@@ -284,8 +284,8 @@
     </nav>
     <div class="hdr-right">
       <div class="seg" id="per-seg">
-        <button class="seg-btn on" onclick="setPerson('ruben')">Ruben</button>
-        <button class="seg-btn" onclick="setPerson('youval')">Youval</button>
+        <button class="seg-btn on" id="btn-ruben" onclick="setPerson('ruben')">Ruben</button>
+        <button class="seg-btn" id="btn-yuval" onclick="setPerson('yuval')">Yuval</button>
       </div>
       <div class="exam-pill"><span class="blink"></span><span id="h-exam">Exams · July 1, 2026</span></div>
       <div class="seg" id="lang-seg">
@@ -429,7 +429,7 @@ const SUBJ={
     {id:'lin2',  n:{en:'Linearité 2', he:'לינאריות 2'}, c:'#34D399',bg:'rgba(52,211,153,.11)', tx:'#6EE7B7'},
     {id:'intro', n:{en:'Intro',        he:'מבוא'},        c:'#FBBF24',bg:'rgba(251,191,36,.11)', tx:'#FDE68A'},
   ],
-  youval:[
+  yuval:[
     {id:'infi',    n:{en:'Infi',         he:'אינפי'},       c:'#FB923C',bg:'rgba(251,146,60,.11)',  tx:'#FDBA74'},
     {id:'lin2',    n:{en:'Linearité 2',  he:'לינאריות 2'}, c:'#34D399',bg:'rgba(52,211,153,.11)',  tx:'#6EE7B7'},
     {id:'intro',   n:{en:'Intro',         he:'מבוא'},        c:'#FBBF24',bg:'rgba(251,191,36,.11)',  tx:'#FDE68A'},
@@ -457,6 +457,7 @@ const WEEKS=buildWeeks();
    State
 ═══════════════════════════════════════════════════════ */
 let person='ruben', lang='en', wIdx=0, currentView='planner';
+const PERSON_NAMES={ruben:{en:'Ruben',he:'ראובן'},yuval:{en:'Yuval',he:'יובל'}};
 let selectedTag=null;
 let chatHistory=[]; // [{role, content, time}]
 let GROQ_KEY='';
@@ -469,15 +470,15 @@ const DEPLOYED=window.location.protocol!=='file:'&&!['localhost','127.0.0.1'].in
 
 wIdx=Math.max(0,WEEKS.findIndex(s=>{const e=new Date(s);e.setDate(e.getDate()+6);return TD>=s&&TD<=e;}));
 
-const sched={ruben:{},youval:{}};
-const prog={ruben:{},youval:{}};
+const sched={ruben:{},yuval:{}};
+const prog={ruben:{},yuval:{}};
 
 try{
   const r=localStorage.getItem('huji26v3');
   if(r){
     const p=JSON.parse(r);
-    if(p.sched){Object.assign(sched.ruben,p.sched.ruben||{});Object.assign(sched.youval,p.sched.youval||{});}
-    if(p.prog){Object.assign(prog.ruben,p.prog.ruben||{});Object.assign(prog.youval,p.prog.youval||{});}
+    if(p.sched){Object.assign(sched.ruben,p.sched.ruben||{});Object.assign(sched.yuval,p.sched.yuval||p.sched.youval||{});}
+    if(p.prog){Object.assign(prog.ruben,p.prog.ruben||{});Object.assign(prog.yuval,p.prog.yuval||p.prog.youval||{});}
     if(p.key)OPENAI_KEY=p.key;
     if(p.akey)ANTHROPIC_KEY=p.akey;
     if(p.gkey)GEMINI_KEY=p.gkey;
@@ -644,7 +645,7 @@ function clearWeek(){
 ═══════════════════════════════════════════════════════ */
 function setPerson(p){
   person=p;chatHistory=[];
-  document.querySelectorAll('#per-seg .seg-btn').forEach((b,i)=>b.classList.toggle('on',i===0?p==='ruben':p==='youval'));
+  document.querySelectorAll('#per-seg .seg-btn').forEach((b,i)=>b.classList.toggle('on',i===0?p==='ruben':p==='yuval'));
   renderAll();
 }
 function setLang(l){
@@ -652,6 +653,8 @@ function setLang(l){
   document.documentElement.setAttribute('dir',t.dir);
   document.documentElement.setAttribute('lang',t.lang);
   document.querySelectorAll('#lang-seg .seg-btn').forEach((b,i)=>b.classList.toggle('on',i===0?l==='en':l==='he'));
+  document.getElementById('btn-ruben').textContent=PERSON_NAMES.ruben[l]||'Ruben';
+  document.getElementById('btn-yuval').textContent=PERSON_NAMES.yuval[l]||'Yuval';
   document.getElementById('h-title').textContent=t.h_title;
   document.getElementById('h-sub').textContent=t.h_sub;
   document.getElementById('h-exam').textContent=t.h_exam;
