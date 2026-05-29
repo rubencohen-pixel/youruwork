@@ -182,8 +182,20 @@
     .m100{background:rgba(52,211,153,.1);color:#34D399;border:1px solid rgba(52,211,153,.25)}
 
     /* ── AI / Chat view ────────────────────────────────── */
-    .ai-wrap{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
-    @media(max-width:1050px){.ai-wrap{grid-template-columns:1fr}}
+    .ai-wrap{display:flex;flex-direction:column;gap:14px}
+    .ai-planner-toggle{display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;padding:14px 18px;border-radius:12px 12px 0 0}
+    .ai-planner-toggle:hover{background:rgba(255,255,255,.03)}
+    .ai-planner-body{overflow:hidden;transition:max-height .35s ease,opacity .35s ease}
+    .ai-planner-body.collapsed{max-height:0!important;opacity:0;padding:0}
+    .ai-planner-chevron{font-size:.9rem;transition:transform .3s ease;color:var(--muted)}
+    .ai-planner-chevron.open{transform:rotate(180deg)}
+    .img-upload-btn{display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:9px;background:var(--surf2);border:1px solid var(--bord);cursor:pointer;font-size:1.1rem;flex-shrink:0;transition:all .15s}
+    .img-upload-btn:hover{border-color:var(--acc);background:rgba(129,140,248,.1)}
+    .img-preview-wrap{position:relative;display:inline-block;margin-bottom:8px}
+    .img-preview-wrap img{max-height:120px;max-width:220px;border-radius:8px;border:1px solid var(--bord);object-fit:cover}
+    .img-preview-rm{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;background:#EF4444;color:#fff;font-size:.65rem;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;line-height:1}
+    .chat-bubble .bubble-img{max-width:100%;max-height:260px;border-radius:8px;margin-top:6px;border:1px solid rgba(255,255,255,.1);object-fit:contain}
+    .chat-full{min-height:480px}
     .ai-card{background:var(--surf);border:1px solid var(--bord);border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.3)}
     .ai-card-hd{padding:16px 18px;border-bottom:1px solid var(--bord);display:flex;align-items:center;gap:10px}
     .ai-card-ico{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
@@ -458,6 +470,7 @@ const WEEKS=buildWeeks();
    State
 ═══════════════════════════════════════════════════════ */
 let person='ruben', lang='en', wIdx=0, currentView='planner';
+let pendingImage=null, plannerOpen=false;
 const PERSON_NAMES={ruben:{en:'Ruben',he:'ראובן'},yuval:{en:'Yuval',he:'יובל'}};
 let selectedTag=null;
 let chatHistory=[]; // [{role, content, time}]
@@ -863,8 +876,9 @@ function renderAI(){
       if(msg.role==='typing'){
         chatHTML+=`<div class="chat-bubble assistant"><div class="bubble-content" style="padding:4px 14px"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
       } else {
-        const safe=msg.content.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
-        chatHTML+=`<div class="chat-bubble ${msg.role}"><div class="bubble-content">${safe}</div><div class="bubble-time">${msg.time||''}</div></div>`;
+        const safe=(msg.content||'').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+        const imgHtml=msg.image?`<img src="${msg.image}" class="bubble-img" alt="exercise">`:'' ;
+        chatHTML+=`<div class="chat-bubble ${msg.role}"><div class="bubble-content">${safe}${imgHtml}</div><div class="bubble-time">${msg.time||''}</div></div>`;
       }
     });
   }
@@ -895,33 +909,45 @@ function renderAI(){
     </div>
   </div>
   <div class="ai-wrap">
-    <!-- Planner panel -->
-    <div class="ai-card">
-      <div class="ai-card-hd">
-        <div class="ai-card-ico planner">📅</div>
-        <div><h3>${t.planner_title}</h3><p>${t.planner_sub}</p></div>
-      </div>
-      <div class="ai-card-body">
-        <div class="sec-lbl">${t.your_courses}</div>
-        <div class="course-chips" style="margin-bottom:16px">${chips2}</div>
-        <div class="sec-lbl">${t.what_plan}</div>
-        <textarea id="ai-input" class="ai-textarea" placeholder="${t.ai_placeholder||t.plan_hint}" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey))buildSchedule()"></textarea>
-        <div class="ai-hint">${t.plan_hint}</div>
-        <div class="ai-actions">
-          <button onclick="buildSchedule()" id="ai-submit" class="ai-btn primary">✨ ${t.gen_btn}</button>
+    <!-- Planner panel (collapsible) -->
+    <div class="ai-card" style="overflow:hidden">
+      <div class="ai-planner-toggle" onclick="togglePlanner()">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div class="ai-card-ico planner" style="width:32px;height:32px;font-size:1rem">📅</div>
+          <div><h3 style="margin:0;font-size:.88rem">${t.planner_title}</h3><p style="margin:0;font-size:.7rem;color:var(--muted)">${t.planner_sub}</p></div>
         </div>
-        <div id="ai-result" class="ai-result"></div>
+        <span class="ai-planner-chevron ${plannerOpen?'open':''}" id="planner-chev">▼</span>
+      </div>
+      <div class="ai-planner-body ${plannerOpen?'':'collapsed'}" id="planner-body" style="max-height:${plannerOpen?'600px':'0'}">
+        <div class="ai-card-body">
+          <div class="sec-lbl">${t.your_courses}</div>
+          <div class="course-chips" style="margin-bottom:16px">${chips2}</div>
+          <div class="sec-lbl">${t.what_plan}</div>
+          <textarea id="ai-input" class="ai-textarea" placeholder="${t.ai_placeholder||t.plan_hint}" onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey))buildSchedule()"></textarea>
+          <div class="ai-hint">${t.plan_hint}</div>
+          <div class="ai-actions">
+            <button onclick="buildSchedule()" id="ai-submit" class="ai-btn primary">✨ ${t.gen_btn}</button>
+          </div>
+          <div id="ai-result" class="ai-result"></div>
+        </div>
       </div>
     </div>
-    <!-- Chat panel -->
-    <div class="ai-card" style="display:flex;flex-direction:column">
+    <!-- Chat panel — full width -->
+    <div class="ai-card chat-full" style="display:flex;flex-direction:column">
       <div class="ai-card-hd">
         <div class="ai-card-ico chat">💬</div>
-        <div><h3>${t.chat_title}</h3><p>${t.chat_sub}</p></div>
+        <div>
+          <h3>${t.chat_title}</h3>
+          <p>${lang==='en'?'Ask anything or 📷 upload a photo of your exercise':'שאל כל שאלה או 📷 העלה תמונה של תרגיל'}</p>
+        </div>
       </div>
       <div class="ai-card-body" style="flex:1;display:flex;flex-direction:column">
         <div class="chat-messages" id="chat-messages">${chatHTML}</div>
+        ${pendingImage?`<div style="padding:0 4px 8px"><div class="img-preview-wrap"><img src="${pendingImage}" alt="preview"><button class="img-preview-rm" onclick="clearPendingImage()" title="Remove">✕</button></div></div>`:''}
         <div class="chat-input-row">
+          <label class="img-upload-btn" title="${lang==='en'?'Upload exercise photo':'העלה תמונת תרגיל'}">
+            📷<input type="file" accept="image/*" style="display:none" onchange="handleImageUpload(this)">
+          </label>
           <textarea id="chat-input" class="chat-input" rows="1" placeholder="${t.chat_ph}"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat();}"
             oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,100)+'px'"></textarea>
@@ -945,6 +971,22 @@ function scrollChat(){
   const cm=document.getElementById('chat-messages');
   if(cm)cm.scrollTop=cm.scrollHeight;
 }
+function togglePlanner(){
+  plannerOpen=!plannerOpen;
+  const body=document.getElementById('planner-body');
+  const chev=document.getElementById('planner-chev');
+  if(body){body.style.maxHeight=plannerOpen?'600px':'0';body.classList.toggle('collapsed',!plannerOpen);}
+  if(chev)chev.classList.toggle('open',plannerOpen);
+}
+function handleImageUpload(input){
+  const file=input.files[0];
+  if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{pendingImage=e.target.result;renderAI();};
+  reader.readAsDataURL(file);
+  input.value='';
+}
+function clearPendingImage(){pendingImage=null;renderAI();}
 
 /* ═══════════════════════════════════════════════════════
    Provider helpers
@@ -996,13 +1038,15 @@ function keyNoteHTML(){
 /* ═══════════════════════════════════════════════════════
    AI API call — Gemini (free) | OpenAI | Anthropic
 ═══════════════════════════════════════════════════════ */
-async function callAI(messages,{max_tokens=1024,temperature=0.7}={}){
+async function callAI(messages,{max_tokens=1024,temperature=0.7,model=null}={}){
   // ── Deployed on Netlify: proxy call, key is server-side ──
   if(DEPLOYED){
+    const body={messages,max_tokens,temperature};
+    if(model)body.model=model;
     const resp=await fetch('/api/ai',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({messages,max_tokens,temperature})
+      body:JSON.stringify(body)
     });
     if(!resp.ok){const err=await resp.json().catch(()=>({}));throw new Error(err.error?.message||`Error ${resp.status}`);}
     const data=await resp.json();
@@ -1117,30 +1161,44 @@ async function sendChat(){
   const inputEl=document.getElementById('chat-input');
   if(!inputEl)return;
   const msg=inputEl.value.trim();
-  if(!msg)return;
+  const img=pendingImage;
+  if(!msg&&!img)return;
   inputEl.value='';inputEl.style.height='42px';
+  pendingImage=null;
 
   const subjs=SUBJ[person];
   const subjNames=subjs.map(s=>sName(s)).join(', ');
   const now=fmtTime();
 
-  chatHistory.push({role:'user',content:msg,time:now});
+  chatHistory.push({role:'user',content:msg||(lang==='en'?'Analyse this exercise:':'נתח את התרגיל הזה:'),image:img||null,time:now});
   chatHistory.push({role:'typing'});
   renderAI();
 
   const sysPrompt=`You are an expert math and computer science tutor for a student at the Hebrew University of Jerusalem (HUJI).
 The student "${person}" studies: ${subjNames}.
 You help with: Calculus (Infi), Linear Algebra (Linearité), Introduction to Computer Science (Intro), Applied Math (Matapp).
-Answer in the same language the student uses. Be concise and clear. Use LaTeX notation when needed.
-If asked for exercises, provide step-by-step solutions.`;
+Answer in the same language the student uses. Be clear and detailed. Use mathematical notation when needed.
+If the student sends an image of an exercise: read it carefully, explain what it asks, then give a full step-by-step solution.`;
 
   const messages=[{role:'system',content:sysPrompt}];
   chatHistory.filter(m=>m.role!=='typing').slice(-10).forEach(m=>{
-    if(m.role==='user'||m.role==='assistant')messages.push({role:m.role,content:m.content});
+    if(m.role==='user'||m.role==='assistant'){
+      if(m.image){
+        messages.push({role:'user',content:[
+          {type:'text',text:m.content||''},
+          {type:'image_url',image_url:{url:m.image}}
+        ]});
+      } else {
+        messages.push({role:m.role,content:m.content});
+      }
+    }
   });
 
+  const useVision=!!img;
+  const visionModel='meta-llama/llama-4-scout-17b-16e-instruct';
+
   try{
-    const reply=await callAI(messages,{max_tokens:800,temperature:0.7});
+    const reply=await callAI(messages,{max_tokens:1500,temperature:0.5,model:useVision?visionModel:null});
     chatHistory=chatHistory.filter(m=>m.role!=='typing');
     chatHistory.push({role:'assistant',content:reply,time:fmtTime()});
   }catch(err){

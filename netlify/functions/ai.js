@@ -10,7 +10,7 @@ exports.handler = async function(event) {
   }
 
   try {
-    const { messages, max_tokens = 1024, temperature = 0.7 } = JSON.parse(event.body || '{}');
+    const { messages, max_tokens = 1024, temperature = 0.7, model = 'llama-3.3-70b-versatile' } = JSON.parse(event.body || '{}');
 
     const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -18,12 +18,7 @@ exports.handler = async function(event) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${process.env.GROQ_KEY}`
       },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages,
-        max_tokens,
-        temperature
-      })
+      body: JSON.stringify({ model, messages, max_tokens, temperature })
     });
 
     const data = await resp.json();
