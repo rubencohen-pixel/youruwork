@@ -267,6 +267,24 @@
     .toast.ti{background:#0F1422;border:1px solid rgba(129,140,248,.28);color:var(--acc)}
     .toast.out{animation:toastOut .22s ease forwards}
 
+    /* ── Sync indicator ──────────────────────────────── */
+    .sync-dot{width:7px;height:7px;border-radius:50%;background:var(--muted2);flex-shrink:0;transition:background .3s}
+    .sync-dot.ok{background:#34D399}
+    .sync-dot.saving{background:#FBBF24;animation:pulse .8s infinite}
+    .sync-dot.err{background:#F87171}
+    .sync-pill{display:flex;align-items:center;gap:5px;font-size:.62rem;color:var(--muted);font-weight:500}
+
+    /* ── Share ────────────────────────────────────────── */
+    .share-btn{padding:5px 9px;border-radius:6px;border:1px solid var(--bord);background:transparent;color:var(--muted);font:600 .7rem/1 inherit;cursor:pointer;transition:all .13s;display:flex;align-items:center;gap:4px}
+    .share-btn:hover{background:rgba(129,140,248,.1);border-color:var(--acc);color:var(--acc)}
+    .import-banner{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surf);border:1px solid var(--acc);border-radius:12px;padding:14px 20px;display:flex;align-items:center;gap:12px;z-index:500;box-shadow:0 8px 32px rgba(0,0,0,.7);animation:slideUp .25s ease;max-width:420px;width:calc(100% - 40px)}
+    .import-banner .ib-msg{font-size:.8rem;font-weight:600;flex:1}
+    .import-banner .ib-msg span{color:var(--acc)}
+    .import-yes{padding:7px 14px;border-radius:7px;background:var(--acc);border:none;color:#fff;font:700 .75rem/1 inherit;cursor:pointer;transition:background .13s;white-space:nowrap}
+    .import-yes:hover{background:var(--acc2)}
+    .import-no{padding:7px 10px;border-radius:7px;background:transparent;border:1px solid var(--bord);color:var(--muted2);font:600 .75rem/1 inherit;cursor:pointer;white-space:nowrap}
+    .import-no:hover{border-color:var(--bord2);color:var(--txt2)}
+
     /* ── Confetti ──────────────────────────────────────── */
     #confetti{position:fixed;inset:0;pointer-events:none;z-index:9998;opacity:0;transition:opacity .3s}
     #confetti.on{opacity:1}
@@ -280,6 +298,7 @@
 
 <canvas id="confetti"></canvas>
 <div id="toast-ct"></div>
+<div id="import-banner" style="display:none"></div>
 
 <header class="hdr">
   <div class="hdr-inner">
@@ -300,6 +319,8 @@
         <button class="seg-btn on" id="btn-ruben" onclick="setPerson('ruben')">Ruben</button>
         <button class="seg-btn" id="btn-yuval" onclick="setPerson('yuval')">Yuval</button>
       </div>
+      <div class="sync-pill" id="sync-pill" style="display:none"><div class="sync-dot" id="sync-dot"></div><span id="sync-lbl"></span></div>
+      <button class="share-btn" id="share-btn" onclick="shareSchedule()" title="Share my schedule">📤 <span id="share-lbl">Share</span></button>
       <div class="exam-pill"><span class="blink"></span><span id="h-exam">Exams · July 1, 2026</span></div>
       <div class="seg" id="lang-seg">
         <button class="seg-btn on" onclick="setLang('en')">EN</button>
@@ -454,7 +475,7 @@ const HOURS=[9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,0];
 const BREAK={id:'break',n:{en:'Break',he:'הפסקה'},c:'#6B7280',bg:'rgba(107,114,128,.12)',tx:'#9CA3AF'};
 const WEEK_COUNT=12;
 const WEEK_OFFSET=7; // calendar starts at week 8 of 12
-const SS=new Date(2026,4,31), SE=new Date(2026,6,5), TD=new Date(2026,4,31);
+const SS=new Date(2026,4,31), SE=new Date(2026,6,5), TD=new Date();
 
 function toISO(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function inRange(d){return d>=SS&&d<=SE;}
@@ -504,7 +525,74 @@ try{
   }
 }catch(e){}
 
-function save(){try{localStorage.setItem('huji26v3',JSON.stringify({sched,prog,key:OPENAI_KEY,akey:ANTHROPIC_KEY,gkey:GEMINI_KEY,grkey:GROQ_KEY,provider:AI_PROVIDER}));}catch(e){}}
+let _lastServerUpdate=0;
+let _syncPending=false;
+let _syncTimeout=null;
+
+function saveLocal(){try{localStorage.setItem('huji26v3',JSON.stringify({sched,prog,key:OPENAI_KEY,akey:ANTHROPIC_KEY,gkey:GEMINI_KEY,grkey:GROQ_KEY,provider:AI_PROVIDER}));}catch(e){}}
+
+function setSyncUI(state,lbl){
+  const pill=document.getElementById('sync-pill');
+  const dot=document.getElementById('sync-dot');
+  const span=document.getElementById('sync-lbl');
+  if(!pill)return;
+  pill.style.display='flex';
+  dot.className='sync-dot '+state;
+  span.textContent=lbl;
+}
+
+async function pushToServer(){
+  if(!DEPLOYED)return;
+  setSyncUI('saving',lang==='he'?'שומר...':'Saving…');
+  try{
+    const res=await fetch('/api/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sched,prog})});
+    if(res.ok){
+      const d=await res.json();
+      _lastServerUpdate=d.updatedAt||_lastServerUpdate;
+      setSyncUI('ok',lang==='he'?'נשמר':'Saved');
+    } else {
+      setSyncUI('err',lang==='he'?'שגיאה':'Error');
+    }
+  }catch(e){setSyncUI('err',lang==='he'?'שגיאה':'Error');}
+}
+
+async function pullFromServer(){
+  if(!DEPLOYED)return;
+  try{
+    const res=await fetch('/api/sync');
+    if(!res.ok)return;
+    const d=await res.json();
+    // If server has no data yet (updatedAt=0) and we have local data, push local to server
+    if(!d.updatedAt){
+      const hasLocal=Object.keys(sched.ruben).length>0||Object.keys(sched.yuval).length>0;
+      if(hasLocal)pushToServer();
+      return;
+    }
+    if(d.updatedAt>_lastServerUpdate){
+      _lastServerUpdate=d.updatedAt;
+      if(d.sched){
+        const prev=JSON.stringify({sched,prog});
+        // Full replace so deletions propagate
+        Object.keys(sched.ruben).forEach(k=>delete sched.ruben[k]);
+        Object.keys(sched.yuval).forEach(k=>delete sched.yuval[k]);
+        Object.keys(prog.ruben).forEach(k=>delete prog.ruben[k]);
+        Object.keys(prog.yuval).forEach(k=>delete prog.yuval[k]);
+        Object.assign(sched.ruben,d.sched.ruben||{});
+        Object.assign(sched.yuval,d.sched.yuval||{});
+        Object.assign(prog.ruben,(d.prog||{}).ruben||{});
+        Object.assign(prog.yuval,(d.prog||{}).yuval||{});
+        saveLocal();
+        if(JSON.stringify({sched,prog})!==prev)renderAll();
+      }
+    }
+  }catch(e){}
+}
+
+function save(){
+  saveLocal();
+  clearTimeout(_syncTimeout);
+  _syncTimeout=setTimeout(pushToServer,800);
+}
 function sk(d,h){return `${toISO(d)}_${h}`;}
 function chips(d,h){return sched[person][sk(d,h)]||[];}
 function addChip(d,h,sid,tid){const k=sk(d,h);if(!sched[person][k])sched[person][k]=[];sched[person][k].push({sid,tid});save();}
@@ -675,6 +763,7 @@ function setLang(l){
   document.getElementById('lbl-planner').textContent=t.lbl_planner;
   document.getElementById('lbl-progress').textContent=t.lbl_progress;
   document.getElementById('lbl-ai').textContent=t.lbl_ai;
+  document.getElementById('share-lbl').textContent=l==='he'?'שתף':'Share';
   renderAll();
 }
 function setView(v){
@@ -1236,6 +1325,61 @@ If the student sends an image of an exercise: read it carefully, explain what it
 }
 
 /* ═══════════════════════════════════════════════════════
+   Schedule sharing
+═══════════════════════════════════════════════════════ */
+function shareSchedule(){
+  const data={person,sched:sched[person],prog:prog[person]};
+  const b64=btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  const url=window.location.origin+window.location.pathname+'?import='+encodeURIComponent(b64);
+  navigator.clipboard.writeText(url).then(()=>{
+    toast(lang==='en'?'Link copied! Send it to the other person 🔗':'הקישור הועתק! שלח לצד השני 🔗','ts');
+  }).catch(()=>{
+    prompt(lang==='en'?'Copy this link and send it:':'העתק את הקישור הזה:',url);
+  });
+}
+
+let _pendingImport=null;
+
+function checkImportURL(){
+  const params=new URLSearchParams(window.location.search);
+  const raw=params.get('import');
+  if(!raw)return;
+  try{
+    const data=JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(raw)))));
+    if(!data.person||!data.sched)return;
+    _pendingImport=data;
+    const who=data.person;
+    const whoName=PERSON_NAMES[who]?.[lang]||who;
+    const banner=document.getElementById('import-banner');
+    banner.className='import-banner';
+    banner.style.display='flex';
+    banner.innerHTML=`<div class="ib-msg">${lang==='en'?`<span>${whoName}</span>'s schedule is ready to load.`:`הלוח של <span>${whoName}</span> מוכן לייבוא.`}</div><button class="import-yes" onclick="doImport()">✓ ${lang==='en'?'Load':'טען'}</button><button class="import-no" onclick="dismissImport()">✕</button>`;
+  }catch(e){}
+}
+
+function doImport(){
+  if(!_pendingImport)return;
+  const data=_pendingImport;
+  const who=data.person;
+  Object.assign(sched[who],data.sched||{});
+  Object.assign(prog[who],data.prog||{});
+  save();
+  _pendingImport=null;
+  dismissImport();
+  const whoName=PERSON_NAMES[who]?.[lang]||who;
+  toast(lang==='en'?`${whoName}'s schedule loaded!`:`הלוח של ${whoName} נטען!`,'ts');
+  if(person!==who)setPerson(who);
+  else renderAll();
+}
+
+function dismissImport(){
+  const banner=document.getElementById('import-banner');
+  banner.style.display='none';
+  _pendingImport=null;
+  window.history.replaceState({},'',window.location.origin+window.location.pathname);
+}
+
+/* ═══════════════════════════════════════════════════════
    Keyboard
 ═══════════════════════════════════════════════════════ */
 document.addEventListener('keydown',e=>{
@@ -1249,6 +1393,16 @@ document.addEventListener('keydown',e=>{
    Init
 ═══════════════════════════════════════════════════════ */
 renderAll();
+checkImportURL();
+
+// On server: load from cloud first, then poll every 15s for the other person's changes
+if(DEPLOYED){
+  setSyncUI('saving',lang==='he'?'טוען...':'Loading…');
+  pullFromServer().then(()=>{
+    setSyncUI('ok',lang==='he'?'מסונכרן':'Synced');
+    setInterval(pullFromServer,15000);
+  });
+}
 </script>
 </body>
 </html>
